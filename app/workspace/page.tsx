@@ -7,6 +7,7 @@ import Image from "next/image";
 import "./workflow.css";
 import "./calibration.css";
 import { RequirementPanel } from "./requirement-panel";
+import { CandidateImport } from "../candidates/candidate-import";
 import { SpecHistory, type Snapshots } from "./spec-history";
 import { apiError, API_BASE, assertCalibration, Calibration, Criterion, JOB_KEY, NODE_LABEL, proposalDraft, stepFor, TYPE_LABEL, Verdict } from "./api";
 
@@ -68,14 +69,22 @@ export default function WorkspacePage() {
       else if (hash === "#candidate-evaluations") setView("候选人");
       else if (hash === "#feedback-review") setView("反馈与审批");
     };
-    void Promise.resolve().then(applyHash);
+    void Promise.resolve().then(async () => {
+      applyHash();
+      try {
+        const id = localStorage.getItem(JOB_KEY);
+        if (id) receive(await request(`/calibrations/${encodeURIComponent(id)}`));
+      } catch (err) { setError(err instanceof Error ? err.message : "无法读取当前职位。"); }
+    });
+    window.addEventListener("hashchange", applyHash);
+    return () => window.removeEventListener("hashchange", applyHash);
   }, []);
   const selectedEvaluation = job?.evaluations.find((item) => item.candidate_id === selected);
   const waiting = job?.workflow.waiting_for;
 
   function receive(value: unknown) {
     assertCalibration(value);
-    setJob(value); setDraft(value.criteria.map((item) => ({ ...item }))); setEditing(false);
+    setJob(value); setTitle(value.job_title); setDraft(value.criteria.map((item) => ({ ...item }))); setEditing(false);
     setSelected((id) => value.evaluations.some((item) => item.candidate_id === id) ? id : value.evaluations[0]?.candidate_id ?? "");
     // 只存任务引用，Spec/证据/审批状态的事实来源始终是后端 checkpoint。
     try { localStorage.setItem(JOB_KEY, value.job_id); } catch { /* 存储禁用时仍可手动恢复。 */ }
@@ -110,7 +119,7 @@ export default function WorkspacePage() {
 
   async function confirm() {
     if (!job || waiting !== "spec_confirmation") return;
-    await operation("确认标准并评估", async () => { receive(await request(`/calibrations/${job.job_id}/spec/confirm`, { criteria: draft })); setView("候选人"); setNotice("标准已确认，证据抽取与评估已完成。"); });
+    await operation("确认标准", async () => { receive(await request(`/calibrations/${job.job_id}/spec/confirm`, { criteria: draft })); router.push("/candidates"); });
   }
 
   async function submit(event: FormEvent) {
@@ -140,6 +149,7 @@ export default function WorkspacePage() {
 
   function startNew() {
     if (job && !window.confirm("离开当前任务并创建新任务？已有 checkpoint 不会删除，可用 job_id 恢复。")) return;
+    try { localStorage.removeItem(JOB_KEY); } catch { /* The current view still resets. */ }
     setJob(null); setDraft([]); setFeedback(""); setClarifyNote(""); setEditing(false); setError(""); setNotice(""); setDatabaseHistory(null); setView("需求校准"); setTitle(""); setRequirement(""); setCandidatesText("");
   }
 
@@ -149,7 +159,7 @@ export default function WorkspacePage() {
   const proposalType = !proposal ? "—" : proposal.add?.length && proposal.remove?.length ? "条目增删" : proposal.add?.length ? "新增条目" : proposal.remove?.length ? "删除条目" : "无变更";
   const impactedCells = proposal ? ((proposal.add?.length ?? 0) + (proposal.remove?.length ?? 0)) * job!.evaluations.length : 0;
 
-  return <div className="workspace-app"><aside className="workspace-sidebar"><Link href="/" aria-label="Hire Loop 首页"><Image src="/hire-loop-logo.png" alt="Hire Loop" width={2170} height={725} priority style={{ width: 168, height: "auto" }} /></Link><label className="sidebar-job"><small>正在校准</small><input aria-label="职位名称" value={title} disabled={!!job || !!busy} onChange={(event) => setTitle(event.target.value)} placeholder="职位名称" /><span>{job ? `v${job.spec_version}` : "草稿"}</span></label><nav aria-label="工作台导航">{([["需求校准", "◇"], ["招聘标准", "☑"], ["候选人", "▤"], ["反馈与审批", "✎"]] as const).map(([label, icon]) => <button key={label} className={view === label ? "active" : ""} aria-current={view === label ? "page" : undefined} onClick={() => { if (label === "候选人" && (!job || step === "spec")) { router.push("/candidates"); return; } setView(label); }}>{icon}　{label}</button>)}</nav><footer>人工确认 · 可追溯</footer></aside><main className="loop-page">
+  return <div className="workspace-app"><aside className="workspace-sidebar"><Link href="/" aria-label="Hire Loop 首页"><Image src="/hire-loop-logo.png" alt="Hire Loop" width={2170} height={725} priority style={{ width: 168, height: "auto" }} /></Link><nav aria-label="工作台导航">{([["需求校准", "◇"], ["招聘标准", "☑"], ["候选人", "▤"], ["反馈与审批", "✎"]] as const).map(([label, icon]) => <button key={label} className={view === label ? "active" : ""} aria-current={view === label ? "page" : undefined} onClick={() => { if (label === "候选人") { router.push("/candidates"); return; } setView(label); }}>{icon}　{label}</button>)}</nav><footer>人工确认 · 可追溯</footer></aside><main className="loop-page">
     <header className="loop-header">
       <div className="workspace-breadcrumb">Hire Loop　›　<b>{view}</b></div>
       <span className="loop-mode">{job?.job_title ?? title ?? "未命名职位"} · {job ? `v${job.spec_version}` : "草稿 · 未启用"}</span>
@@ -174,10 +184,10 @@ export default function WorkspacePage() {
         {!job ? <div className="loop-form"><h2>尚未生成招聘标准</h2><p className="loop-note">先在「需求校准」提交需求，生成后的标准在这里查看、编辑并确认。</p><button className="loop-button primary" onClick={() => setView("需求校准")}>前往需求校准</button></div> : <>
           <div className="spec-tabs" role="tablist"><button role="tab" aria-selected={specTab === "当前标准"} className={specTab === "当前标准" ? "active" : ""} onClick={() => setSpecTab("当前标准")}>当前标准</button><button role="tab" aria-selected={specTab === "版本记录"} className={specTab === "版本记录" ? "active" : ""} onClick={() => setSpecTab("版本记录")}>版本记录</button></div>
           {specTab === "当前标准" && <div className="loop-form">
-            {waiting === "spec_confirmation" ? <><div className="loop-intro"><p>等待确认 · SPEC_CONFIRMATION</p><h1>确认 Spec v{job.spec_version}</h1><span>评估尚未开始，确认后才调用证据节点。</span></div>{!!job.clarification_questions?.length && <div className="loop-form"><h2>后端澄清问题</h2><p className="loop-note">由 clarify 节点生成。标准已按澄清后的需求拟定，如有出入请直接在下方修改标准后再确认。</p>{job.clarification_questions.map((question, i) => <p className="loop-note" key={i}>澄清问题：{question}</p>)}</div>}<CriteriaEditor value={draft} onChange={setDraft} disabled={!!busy} /><button className="loop-button primary" disabled={!!busy || !draft.length || draft.some((item) => !item.text.trim())} onClick={() => void confirm()}>Confirm Spec v{job.spec_version} · 恢复流程</button></> : <>
+            {waiting === "spec_confirmation" ? <><div className="loop-intro"><p>等待确认 · SPEC_CONFIRMATION</p><h1>确认 Spec v{job.spec_version}</h1><span>确认标准后，前往候选人页上传简历并开始评估。</span></div>{!!job.clarification_questions?.length && <div className="loop-form"><h2>后端澄清问题</h2><p className="loop-note">由 clarify 节点生成。标准已按澄清后的需求拟定，如有出入请直接在下方修改标准后再确认。</p>{job.clarification_questions.map((question, i) => <p className="loop-note" key={i}>澄清问题：{question}</p>)}</div>}<CriteriaEditor value={draft} onChange={setDraft} disabled={!!busy} /><button className="loop-button primary" disabled={!!busy || !draft.length || draft.some((item) => !item.text.trim())} onClick={() => void confirm()}>确认招聘标准 v{job.spec_version}</button></> : <>
               <div className="loop-intro"><p>已生效 · SPEC v{job.spec_version}</p><h1>当前招聘标准</h1><span>{job.job_title}</span></div>
               <div className="loop-spec-table"><table><tbody>{job.criteria.map((item) => <tr key={item.id}><td>{item.id}</td><td>{TYPE_LABEL[item.type]}</td><td>{item.text}</td></tr>)}</tbody></table></div>
-              <button className="loop-button secondary" onClick={() => setView("候选人")}>查看候选人评估</button>
+              <button className="loop-button secondary" onClick={() => router.push("/candidates")}>查看候选人评估</button>
             </>}
           </div>}
           {specTab === "版本记录" && <div className="loop-form">
@@ -190,6 +200,7 @@ export default function WorkspacePage() {
       </section>}
 
       {view === "候选人" && <section id="candidate-evaluations">
+        {job && <CandidateImport job={job} onChange={receive} disabled={!!busy} />}
         {!job || step === "spec" ? <div className="loop-form"><h2>还没有可评估的候选人</h2><p className="loop-note">在「需求校准」提交需求、在「招聘标准」确认标准后，候选人评估结果会出现在这里。</p><button className="loop-button primary" onClick={() => setView(job ? "招聘标准" : "需求校准")}>{job ? "前往招聘标准" : "前往需求校准"}</button></div> : <>
           <div className="loop-tier-tabs">{(["全部", ...TIERS] as const).map((label) => <button key={label} className={tier === label ? "active" : ""} onClick={() => { setTier(label); const first = job.evaluations.find((item) => label === "全部" || item.verdict === label); setSelected(first?.candidate_id ?? ""); }}>{label} {label === "全部" ? job.evaluations.length : job.tiers[label] ?? 0}</button>)}</div>
           <section className="loop-evaluation-grid">

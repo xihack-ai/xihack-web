@@ -166,3 +166,11 @@ npx tsc --noEmit --incremental false
 npm run build
 node --test app/workspace/api.test.mjs
 ```
+
+## 候选人批量上传
+
+创建职位后，进入 `/candidates`，多选或拖拽 PDF、DOC、DOCX、RTF，点击「上传并解析」。页面逐文件显示成功、重复或失败，候选人详情可查看解析原文。标准确认后点击「开始评估」，进度按候选人更新，已完成结果保留；「暂停评估」会在当前简历完成后暂停，之后可继续剩余简历。返回工作台时会读取当前职位，支持继续确认标准和提交反馈。
+
+文件解析使用后端 AnyDoc，不需要在前端配置密钥。扫描版 PDF 暂不支持 OCR。每次最多 50 份，单份不超过 10 MiB，总计不超过 50 MiB；前后端都有检查。
+
+同时运行独立预览时，可设置 `HIRESPEC_BUILD_DIR=.next-upload` 隔离构建目录，并用 `NEXT_PUBLIC_API_BASE` 指向对应后端。额外前端端口需要加入后端 `CORS_ORIGINS`。

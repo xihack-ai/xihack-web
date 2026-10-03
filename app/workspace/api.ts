@@ -1,12 +1,14 @@
 export type Criterion = { id: string; type: "MUST_HAVE" | "NICE_TO_HAVE" | "VETO"; text: string; weight: number };
 export type Verdict = "推荐" | "待核实" | "不推荐" | "否决";
 export type Evaluation = { candidate_id: string; name: string; scores: Record<string, number | null>; verdict: Verdict };
+export type Candidate = { candidate_id: string; name: string; source_file: string | null; character_count: number; parser_version: string | null; evaluated: boolean };
 export type Calibration = {
   job_id: string; job_title: string;
   status: "AWAITING_SPEC_CONFIRMATION" | "AWAITING_APPROVAL" | "EVALUATED";
   spec_version: number; criteria: Criterion[];
   evidence: { candidate_id: string; criterion_id: string; quote: string; stance: string; valid: boolean }[];
   evaluations: Evaluation[]; tiers: Record<Verdict, number>; risk_flags: string[];
+  candidates?: Candidate[];
   change_proposal: { reason?: string; add?: Partial<Criterion>[]; remove?: string[] } | null;
   feedback_notes: string[];
   workflow: { next_nodes: string[]; completed_nodes: string[]; waiting_for: "spec_confirmation" | "human_approval" | null; model_mode: "offline_fallback" | "live"; checkpointer: "memory" | "postgres"; history: { node: string; spec_version?: number }[] };
@@ -63,4 +65,22 @@ export function apiError(detail: unknown, status: number): string {
   if (Array.isArray(detail)) return detail.map((item) => `${item.loc?.join(".") ?? "输入"}：${item.msg ?? "参数不合法"}`).join("；");
   if (detail && typeof detail === "object" && "message" in detail) return String(detail.message);
   return `请求失败（HTTP ${status}），请刷新 checkpoint 确认当前状态后重试。`;
+}
+
+export async function candidateRequest(path: string, body?: FormData | object): Promise<unknown> {
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE}${path}`, {
+      method: body === undefined ? "GET" : "POST", cache: "no-store",
+      ...(body instanceof FormData ? { body } : body === undefined ? {} : {
+        headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+      }),
+      signal: AbortSignal.timeout(path.endsWith("/evaluate") ? 600000 : 120000),
+    });
+  } catch {
+    throw new Error("请求中断或超时，请刷新候选人状态后重试。后端可能仍在处理。");
+  }
+  const value = await response.json().catch(() => { throw new Error("后端未返回 JSON，请检查服务地址。"); });
+  if (!response.ok) throw new Error(apiError(value.detail, response.status));
+  return value;
 }

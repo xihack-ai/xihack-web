@@ -1,7 +1,6 @@
 .candidates-app { display: grid; grid-template-columns: 250px minmax(0, 1fr); height: 100vh; overflow: hidden; color: #28313d; background: #f9f9fd; font-size: 14px; }
-.candidates-sidebar .sidebar-job strong { display: block; font-size: 13px; font-weight: 600; }
 .candidates-main { min-width: 0; background: #f9f9fd; height: 100vh; overflow-y: auto; }
-.candidates-topbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 56px; padding: 12px 30px; border-bottom: 1px solid #e8e6f1; background: #fafaff; position: sticky; top: 0; z-index: 5; }
+.candidates-topbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 56px; padding: 12px 30px; border-bottom: 1px solid #e8e6f1; background: #f9f9fd; position: sticky; top: 0; z-index: 5; }
 .candidates-breadcrumb { color: #7d8799; font-size: 12px; }
 .candidates-breadcrumb b { color: #28313d; }
 .candidates-top-actions { display: flex; align-items: center; gap: 16px; font-size: 12px; color: #7d8799; }
@@ -15,7 +14,7 @@
 .candidate-directory, .candidate-report { background: white; border: 1px solid #e6e4ee; border-radius: 12px; overflow: hidden; box-shadow: 0 1px 2px rgb(30 30 60 / 4%); }
 .candidate-directory > b { display: block; padding: 18px; border-bottom: 1px solid #e6e4ee; }
 .directory-item { display: flex; align-items: center; gap: 12px; padding: 18px 14px; border: 0; border-bottom: 1px solid #e6e4ee; width: 100%; background: white; text-align: left; }
-.directory-item.active { background: #f1effe; box-shadow: inset 3px 0 #7165e8; }
+.directory-item.active { background: #f1effe; }
 .directory-item > span { color: #8b95a1; font-size: 12px; }
 .directory-item > strong { flex: 1; }
 .directory-item small { display: block; font-size: 11px; color: #5f6b7a; margin-top: 4px; font-weight: 400; }
@@ -39,4 +38,4 @@
 .candidates-empty-card a { background: #7967ed; color: white; border-radius: 8px; padding: 10px 18px; font-weight: 700; }
 @media (max-width: 1200px) { .candidates-app { grid-template-columns: 220px minmax(0, 1fr); } .candidates-content { padding: 24px; } .candidates-grid { grid-template-columns: 280px minmax(0, 1fr); } }
 @media (max-width: 960px) { .candidates-grid { grid-template-columns: 1fr; } }
-@media (max-width: 700px) { .candidates-app { grid-template-columns: 1fr; height: auto; overflow: visible; } .candidates-main { height: auto; overflow: visible; } .candidates-sidebar nav { display: flex; flex-wrap: wrap; gap: 6px; } .candidates-sidebar nav > a { width: auto; padding: 8px; font-size: 12px; } .candidates-sidebar .nav-caption, .candidates-sidebar footer, .sidebar-job { display: none; } .candidates-sidebar { padding: 16px; } .candidates-topbar { padding: 12px 16px; } .candidates-content { padding: 20px 16px; } .candidates-title { flex-direction: column; } }
+@media (max-width: 700px) { .candidates-app { grid-template-columns: 1fr; height: auto; overflow: visible; } .candidates-main { height: auto; overflow: visible; } .candidates-sidebar nav { display: flex; flex-wrap: wrap; gap: 6px; } .candidates-sidebar nav > a { width: auto; padding: 8px; font-size: 12px; } .candidates-sidebar .nav-caption, .candidates-sidebar footer { display: none; } .candidates-sidebar { padding: 16px; } .candidates-topbar { padding: 12px 16px; } .candidates-content { padding: 20px 16px; } .candidates-title { flex-direction: column; } }

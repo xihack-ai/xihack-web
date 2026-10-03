@@ -1,16 +1,14 @@
 .workspace-app { display: grid; grid-template-columns: 250px minmax(0, 1fr); height: 100vh; overflow: hidden; color: #28313d; background: #f9f9fd; font-size: 14px; }
-.workspace-sidebar { display: flex; flex-direction: column; padding: 22px 16px; background: #f7f6fc; border-right: 1px solid #e8e6f1; overflow-y: auto; }
-.sidebar-job { display: grid; grid-template-columns: 1fr auto; margin-top: 28px; padding: 14px; border: 1px solid #e8e6f1; border-radius: 8px; background: white; gap: 6px; }
-.sidebar-job small { grid-column: 1 / -1; color: #7d8799; font-size: 12px; }
-.sidebar-job input { width: 100%; min-width: 0; border: 0; background: transparent; color: #28313d; font-size: 13px; font-weight: 600; }
-.sidebar-job > span { color: #8b7cf6; background: #f1eeff; padding: 2px 6px; border-radius: 4px; font-size: 11px; }
+.workspace-sidebar { display: flex; flex-direction: column; padding: 22px 16px; background: #f9f9fd; border-right: 1px solid #e8e6f1; overflow-y: auto; }
+
 .nav-caption { display: block; margin: 26px 12px 10px; color: #929aac; font-size: 12px; }
+.workspace-sidebar nav { margin-top: 26px; }
 .workspace-sidebar nav > a, .workspace-sidebar nav > button { display: block; padding: 11px 12px; margin: 3px 0; border: 0; border-radius: 8px; color: #697587; width: 100%; text-align: left; background: none; font-size: 14px; }
-.workspace-sidebar nav > .active { background: #f0edff; color: #28313d; box-shadow: inset 2px 0 #8b7cf6; font-weight: 600; }
+.workspace-sidebar nav > .active { background: #f0edff; color: #28313d; font-weight: 600; }
 .workspace-sidebar nav > a:hover, .workspace-sidebar nav > button:not(:disabled):hover { background: #f0edff; color: #7165e8; }
 .workspace-sidebar footer { margin-top: auto; padding: 24px 12px 0; color: #929aac; border-top: 1px solid #e8e6f1; font-size: 12px; }
 .workspace-app .loop-page { background: #f9f9fd; padding: 0; min-width: 0; height: 100vh; min-height: 0; overflow-y: auto; }
-.workspace-app .loop-header { max-width: none; margin: 0; min-height: 56px; padding: 12px 24px; border-bottom: 1px solid #e8e6f1; background: #fafaff; position: sticky; top: 0; z-index: 5; }
+.workspace-app .loop-header { max-width: none; margin: 0; min-height: 56px; padding: 12px 24px; border-bottom: 1px solid #e8e6f1; background: #f9f9fd; position: sticky; top: 0; z-index: 5; }
 .workspace-breadcrumb { color: #7d8799; font-size: 12px; }
 .workspace-breadcrumb b { color: #28313d; }
 .workspace-app .loop-mode { margin-left: auto; border: none; background: #f1effa; color: #8b7cf6; font-weight: 400; }
@@ -80,4 +78,4 @@
 .workspace-app .loop-note { background: #f1eeff; border-color: #8b7cf6; }
 @media (max-width: 1200px) { .workspace-app { grid-template-columns: 220px minmax(0, 1fr); } .calibration-columns { grid-template-columns: minmax(0, 1fr) 280px; gap: 16px; } .workspace-app .loop-main { padding: 24px; } }
 @media (max-width: 960px) { .calibration-columns { grid-template-columns: 1fr; } .draft-preview { position: static; } }
-@media (max-width: 700px) { .workspace-app { grid-template-columns: 1fr; height: auto; overflow: visible; } .workspace-app .loop-page { height: auto; overflow: visible; } .workspace-sidebar { padding: 16px; } .workspace-sidebar nav { display: flex; flex-wrap: wrap; gap: 6px; } .workspace-sidebar nav > a, .workspace-sidebar nav > button { width: auto; padding: 8px; font-size: 12px; } .workspace-sidebar .nav-caption, .workspace-sidebar footer, .sidebar-job { display: none; } .workspace-app .loop-main { padding: 20px 16px; } .workspace-app .loop-header { padding: 12px 16px; position: sticky; top: 0; z-index: 5; } .intent-body footer { align-items: flex-start; } }
+@media (max-width: 700px) { .workspace-app { grid-template-columns: 1fr; height: auto; overflow: visible; } .workspace-app .loop-page { height: auto; overflow: visible; } .workspace-sidebar { padding: 16px; } .workspace-sidebar nav { display: flex; flex-wrap: wrap; gap: 6px; } .workspace-sidebar nav > a, .workspace-sidebar nav > button { width: auto; padding: 8px; font-size: 12px; } .workspace-sidebar .nav-caption, .workspace-sidebar footer { display: none; } .workspace-app .loop-main { padding: 20px 16px; } .workspace-app .loop-header { padding: 12px 16px; position: sticky; top: 0; z-index: 5; } .intent-body footer { align-items: flex-start; } }
