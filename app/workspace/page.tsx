@@ -181,7 +181,7 @@ export default function WorkspacePage() {
   const impactedCells = proposal ? ((proposal.add?.length ?? 0) + (proposal.remove?.length ?? 0)) * job!.evaluations.length : 0;
 
   return <div className="workspace-app"><aside className="workspace-sidebar"><Link href="/" aria-label="Hire Loop 首页"><Image src="/hire-loop-logo.png" alt="Hire Loop" width={2170} height={725} priority style={{ width: 168, height: "auto" }} /></Link>
-    <div className="sidebar-job-card"><small>正在校准</small><strong>{job?.job_title ?? title || "尚未创建职位"}</strong><span>{job ? `v${job.spec_version}` : "草稿"}</span></div>
+    <div className="sidebar-job-card"><small>正在校准</small><strong>{job?.job_title ?? (title || "尚未创建职位")}</strong><span>{job ? `v${job.spec_version}` : "草稿"}</span></div>
     <nav aria-label="工作台导航" className="workspace-nav">
       <p className="workspace-nav-label">主流程</p>
       <button className={view === "需求校准" ? "active" : ""} onClick={() => setView("需求校准")}>◇　需求校准</button>
