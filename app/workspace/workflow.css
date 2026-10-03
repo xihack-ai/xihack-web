@@ -1,0 +1,11 @@
+.loop-workflow { margin: 16px 0 24px; padding: 20px; background: var(--paper-white, white); border: 1px solid var(--cloud-mist, #ddd); border-radius: 12px; }
+.loop-workflow code { display: block; margin-top: 8px; font-size: 12px; color: var(--slate-pencil, #5c6066); overflow-wrap: anywhere; }
+.loop-node-track { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+.loop-node-track span { font-size: 12px; padding: 6px 10px; border-radius: 6px; }
+.loop-node-track .complete { background: #f5f5f7; color: #232629; }
+.loop-node-track .waiting { background: #fff1df; color: #6c3200; border: 1px solid #e2c18a; }
+.loop-restore { margin-top: 32px; padding-top: 20px; border-top: 1px solid #ddd; }
+.loop-json { max-height: 420px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; margin-top: 16px; font-size: 12px; }
+.loop-spec-table td:last-child input[type="number"] { min-width: 64px; max-width: 80px; }
+.loop-candidates { max-height: 650px; overflow-y: auto; }
+@media (max-width: 700px) { .loop-candidates { max-height: 300px; } .loop-workflow { padding: 16px; } }
