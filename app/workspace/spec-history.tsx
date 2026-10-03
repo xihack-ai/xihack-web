@@ -1,57 +1,24 @@
 "use client";
-
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import type { Calibration, Criterion } from "./api";
 import { TYPE_LABEL } from "./api";
-
+import { diffCriteria, historySnapshots, parseHistory } from "./history-data";
 export type Snapshots = Record<number, Criterion[]>;
-
-type DiffRow = { kind: "add" | "mod" | "del"; text: string };
-
-/** 按标准条目的 ID 对比两个版本快照；没有快照的版本不做任何猜测。 */
-function diffVersions(before: Criterion[], after: Criterion[]): DiffRow[] {
-  const rows: DiffRow[] = [];
-  const afterIds = new Set(after.map((item) => item.id));
-  for (const item of before) {
-    if (!afterIds.has(item.id)) { rows.push({ kind: "del", text: `${item.id} · ${TYPE_LABEL[item.type]} · ${item.text}` }); continue; }
-    const next = after.find((entry) => entry.id === item.id)!;
-    if (next.text !== item.text || next.type !== item.type) rows.push({ kind: "mod", text: `${item.id} · ${TYPE_LABEL[item.type]} ${item.text} → ${TYPE_LABEL[next.type]} ${next.text}` });
-  }
-  for (const item of after) if (!before.some((entry) => entry.id === item.id)) rows.push({ kind: "add", text: `${item.id} · ${TYPE_LABEL[item.type]} · ${item.text}` });
-  return rows;
-}
-
 export function SpecHistory({ job, snapshots, audit }: { job: Calibration; snapshots: Snapshots; audit: unknown }) {
   const [picked, setPicked] = useState<number[]>([]);
-
-  // 审计数据形状由后端决定，这里只做防御性提取，不编造字段。
-  const auditList = useMemo<Record<string, unknown>[]>(() => Array.isArray(audit) ? audit as Record<string, unknown>[] : [], [audit]);
-  const versions = useMemo(() => {
-    const known = new Set<number>([job.spec_version, ...Object.keys(snapshots).map(Number), ...job.workflow.history.map((mark) => mark.spec_version).filter((v): v is number => typeof v === "number")]);
-    for (const entry of auditList) if (typeof entry.spec_version === "number") known.add(entry.spec_version);
-    return [...known].sort((a, b) => a - b);
-  }, [job, snapshots, auditList]);
-
-  function toggle(version: number) {
-    setPicked((current) => current.includes(version) ? current.filter((item) => item !== version) : current.length >= 2 ? [current[1], version] : [...current, version]);
-  }
-
-  const [left, right] = picked.length === 2 ? [...picked].sort((a, b) => a - b) : [];
-  const rows = left !== undefined && right !== undefined && snapshots[left] && snapshots[right] ? diffVersions(snapshots[left], snapshots[right]) : null;
-
-  return <div className="version-panel">
+  const history = parseHistory(audit);
+  const known = { ...snapshots, ...historySnapshots(audit), [job.spec_version]: job.criteria };
+  const versions = Object.keys(known).map(Number).sort((a, b) => b - a);
+  function toggle(version: number) { setPicked((current) => current.includes(version) ? current.filter((v) => v !== version) : [...current.slice(-1), version]); }
+  const [left, right] = [...picked].sort((a, b) => a - b);
+  const rows = picked.length === 2 && known[left] && known[right] ? diffCriteria(known[left], known[right]) : null;
+  return <div className="version-panel"><p className="loop-note">选择两个版本，查看类型、定义和权重变化。{audit === null ? "加载数据库历史可恢复旧版本。" : "历史版本来自后端记录。"}</p>
     <div className="version-list">{versions.map((version) => {
-      const entry = auditList.find((item) => item.spec_version === version);
-      return <button key={version} className={`version-item ${picked.includes(version) ? "selected" : ""}`} aria-pressed={picked.includes(version)} onClick={() => toggle(version)}>
-        <b>v{version}</b>
-        <p className="version-summary">{version === 1 ? "初始 Hiring Spec 生成" : "审批通过后更新标准"}</p>
-        <p className="version-meta">触发反馈：{job.feedback_notes[version - 2] ?? (version === 1 ? "需求与澄清补充" : "—")}</p>
-        <p className="version-meta">审批人：{typeof entry?.decided_by === "string" ? entry.decided_by : "需数据库审计"} · 时间：{typeof entry?.created_at === "string" ? entry.created_at : "需数据库审计"}</p>
-        <span className="version-note">{snapshots[version] ? "本会话已保存快照，可参与对比" : "本会话未保存该版本快照，暂无法对比"}</span>
-      </button>;
+      const row = history.spec_versions.find((entry) => entry.version === version);
+      const proposal = row?.source_proposal_id ? history.proposals.find((entry) => entry.id === row.source_proposal_id) : undefined;
+      const feedback = proposal ? history.feedback.find((entry) => entry.id === proposal.feedback_id) : undefined;
+      return <button key={version} className={`version-item ${picked.includes(version) ? "selected" : ""}`} aria-pressed={picked.includes(version)} onClick={() => toggle(version)}><b>v{version}{version === job.spec_version ? " · 当前" : ""}</b><p>{known[version].length} 条标准</p><p className="version-meta">{typeof feedback?.text === "string" ? feedback.text : "未记录关联反馈"}</p><p className="version-meta">{typeof proposal?.decided_by === "string" ? proposal.decided_by : "未记录审批人"} · {typeof row?.created_at === "string" ? row.created_at : "未加载时间"}</p></button>;
     })}</div>
-    <p className="loop-note">勾选两个版本查看条目差异。快照在本页面会话内捕获（创建、确认、审批前后的完整标准集）；跨会话的历史快照需要配置 PostgreSQL 后从审计接口读取。</p>
-    {picked.length === 2 && (rows ? <div className="version-diff">{rows.length ? rows.map((row, index) => <p key={index} className={`diff-row diff-${row.kind}`}>{row.kind === "add" ? "＋" : row.kind === "del" ? "－" : "±"} {row.text}</p>) : <p className="diff-row diff-empty">两个版本之间没有条目差异。</p>}</div> : <p className="loop-note">选中的版本缺少快照，无法对比。</p>)}
-    {picked.length !== 2 && <p className="loop-note">已选择 {picked.length}/2 个版本。</p>}
+    {picked.length !== 2 ? <p className="loop-note">已选择 {picked.length}/2 个版本。{versions.length === 1 ? "当前只加载了一个版本；如已有历史，请加载数据库历史。" : ""}</p> : rows === null ? <p>所选版本快照不可用，请重新选择。</p> : <div className="version-diff"><h3>v{left} → v{right}</h3>{rows.length ? rows.map((row, i) => <div key={i} className={`diff-row diff-${row.kind}`}><b>{row.kind === "add" ? "新增" : row.kind === "del" ? "删除" : "修改"} · {(row.after ?? row.before)!.id}</b>{row.before && <p>之前：{TYPE_LABEL[row.before.type]} · {row.before.text} · 权重 {row.before.weight}</p>}{row.after && <p>之后：{TYPE_LABEL[row.after.type]} · {row.after.text} · 权重 {row.after.weight}</p>}</div>) : <p>两个版本没有条目变化。</p>}</div>}
   </div>;
 }

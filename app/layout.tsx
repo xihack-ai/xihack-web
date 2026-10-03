@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Jersey_10, Manrope } from "next/font/google";
 import "./globals.css";
+import "./landing.css";
 
 const manrope = Manrope({
   variable: "--font-manrope",
