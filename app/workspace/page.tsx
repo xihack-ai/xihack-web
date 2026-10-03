@@ -151,6 +151,8 @@ export default function WorkspacePage() {
     if (job && !window.confirm("离开当前任务并创建新任务？已有 checkpoint 不会删除，可用 job_id 恢复。")) return;
     try { localStorage.removeItem(JOB_KEY); } catch { /* The current view still resets. */ }
     setJob(null); setDraft([]); setFeedback(""); setClarifyNote(""); setEditing(false); setError(""); setNotice(""); setDatabaseHistory(null); setView("需求校准"); setTitle(""); setRequirement(""); setCandidatesText("");
+    // 空状态下点击也要有反馈:定位到招聘意图输入框。
+    requestAnimationFrame(() => document.getElementById("hiring-intent")?.focus());
   }
 
   const proposal = job?.change_proposal ?? null;
