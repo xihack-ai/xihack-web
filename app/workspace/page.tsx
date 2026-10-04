@@ -10,6 +10,7 @@ import { CandidateImport } from "../candidates/candidate-import";
 import { SpecHistory, type Snapshots } from "./spec-history";
 import { Overview, DecisionLog, StandardGroups } from "./insights";
 import { WorkspaceSidebar, type WorkspaceView } from "./workspace-sidebar";
+import type { RequirementReview, RequirementAnswer } from "./api";
 import { apiError, API_BASE, assertCalibration, Calibration, Criterion, JOB_KEY, NODE_LABEL, proposalDraft, stepFor, TYPE_LABEL, Verdict, judgmentFor, JUDGMENT_LABEL } from "./api";
 
 const API = API_BASE;
@@ -18,6 +19,10 @@ type View = WorkspaceView;
 type ChangeReceipt = { beforeVersion: number; afterVersion: number; moved: { name: string; before: Verdict; after: Verdict }[]; recomputed: number; reused: number };
 type ClarificationChoice = "MUST_HAVE" | "NICE_TO_HAVE" | "NOT_REQUIRED";
 const CLARIFICATION_LABEL: Record<ClarificationChoice, string> = { MUST_HAVE: "必须项", NICE_TO_HAVE: "满意项（加分项）", NOT_REQUIRED: "非必要" };
+
+class RequestError extends Error {
+  constructor(message: string, public detail: { code?: string; questions?: RequirementReview["questions"] }) { super(message); }
+}
 
 async function request(path: string, body?: unknown): Promise<unknown> {
   let response: Response;
@@ -31,7 +36,7 @@ async function request(path: string, body?: unknown): Promise<unknown> {
     throw new Error(`无法连接 ${API} 或请求超时。请检查后端启动、CORS 和模型耗时；写请求可能已经执行，请先刷新 checkpoint，不要盲目重复提交。`);
   }
   const value = await response.json().catch(() => { throw new Error("后端没有返回 JSON，请检查 API 地址。"); });
-  if (!response.ok) throw new Error(apiError(value.detail, response.status));
+  if (!response.ok) throw new RequestError(apiError(value.detail, response.status), value.detail ?? {});
   return value;
 }
 
@@ -57,6 +62,9 @@ export default function WorkspacePage() {
   const [specTab, setSpecTab] = useState<"当前标准" | "版本记录">("当前标准");
   const [title, setTitle] = useState("");
   const [requirement, setRequirement] = useState("");
+  const [requirementReview, setRequirementReview] = useState<RequirementReview | null>(null);
+  const [requirementAnswers, setRequirementAnswers] = useState<Record<number, string>>({});
+  const [requirementRounds, setRequirementRounds] = useState<RequirementAnswer[]>([]);
   const [requirementEditing, setRequirementEditing] = useState(false);
   const [manualEditing, setManualEditing] = useState(false);
   const [manualRequirement, setManualRequirement] = useState("");
@@ -109,6 +117,14 @@ export default function WorkspacePage() {
     return () => cancelAnimationFrame(frame);
   }, [view, job?.job_id, targetQuestion]);
   const selectedEvaluation = job?.evaluations.find((item) => item.candidate_id === selected);
+  useEffect(() => {
+    if (requirementReview?.status !== "NEEDS_CLARIFICATION") return;
+    const frame = requestAnimationFrame(() => {
+      document.querySelector(".requirement-clarification")?.scrollIntoView({ block: "start", behavior: "smooth" });
+      document.getElementById("requirement-answer-0")?.focus({ preventScroll: true });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [requirementReview]);
   const waiting = job?.workflow.waiting_for;
 
   function receive(value: unknown) {
@@ -133,12 +149,31 @@ export default function WorkspacePage() {
     return text.split("\n").map((line) => line.split(/[｜|]/)).filter((parts) => parts.length >= 2 && parts[0].trim() && parts.slice(1).join("｜").trim()).map((parts) => ({ name: parts[0].trim(), resume_text: parts.slice(1).join("｜").trim() }));
   }
 
-  async function create(resolvedRequirement: string) {
-    await operation("生成标准", async () => {
-      const result = await request("/jobs", { title: title.trim() || "未命名职位", requirement: resolvedRequirement.trim(), candidates: parseCandidates(candidatesText), require_spec_confirmation: true });
+  function editRequirement(value: string) {
+    setRequirement(value); setRequirementReview(null); setRequirementAnswers({}); setRequirementRounds([]); setError("");
+  }
+
+  async function create(resolvedRequirement: string, answers: RequirementAnswer[] = []) {
+    await operation("分析需求", async () => {
+      const review = await request("/requirements/clarify", { requirement: resolvedRequirement.trim(), answers }) as RequirementReview;
+      if (!["SAFE", "BLOCKED", "NEEDS_CLARIFICATION"].includes(review.status) || !Array.isArray(review.questions)) throw new Error("需求澄清响应格式无效，请检查后端版本。");
+      setRequirementReview(review); setRequirementRounds(answers); setRequirementAnswers({});
+      if (review.status !== "SAFE") { setView("需求校准"); return; }
+      let result: unknown;
+      try {
+        result = await request("/jobs", { title: title.trim() || "未命名职位", requirement: resolvedRequirement.trim(), clarification_answers: answers, candidates: parseCandidates(candidatesText), require_spec_confirmation: true });
+      } catch (err) {
+        // A later generation gate may discover another ambiguity. Keep it in
+        // the answer workflow instead of flattening questions into an alert.
+        if (err instanceof RequestError && err.detail.code === "NEEDS_CLARIFICATION" && err.detail.questions?.length) {
+          setRequirementReview({ status: "NEEDS_CLARIFICATION", reason: err.message, questions: err.detail.questions }); return;
+        }
+        throw err;
+      }
       assertCalibration(result);
       setDatabaseHistory(null); setReceipt(null); setSnapshots({ [result.spec_version]: result.criteria.map((item) => ({ ...item })) });
       receive(result); setTier("全部"); setView("招聘标准"); setSpecTab("当前标准");
+      setRequirementReview(null); setRequirementAnswers({}); setRequirementRounds([]);
       setNotice("标准已生成并停在确认步骤；确认前不抽证据、不评估候选人。");
     });
   }
@@ -189,6 +224,13 @@ export default function WorkspacePage() {
       else if (item.category === "NOT_REQUIRED") setNotice("已记录为非必要；标准与候选人排序不变。");
       else setNotice("当前没有产生新提案；标准与候选人排序不变。");
     });
+  }
+
+  async function answerRequirement() {
+    if (!requirementReview || requirementReview.status !== "NEEDS_CLARIFICATION") return;
+    const answers = requirementReview.questions.map((item, index) => ({ question: item.question, answer: requirementAnswers[index]?.trim() ?? "" }));
+    if (answers.some((item) => !item.answer)) { setError("请逐题填写回答；没有该要求可明确写“非必要”。"); return; }
+    await create(requirement, [...requirementRounds, ...answers]);
   }
 
   async function answerFeedback() {
@@ -264,6 +306,7 @@ export default function WorkspacePage() {
   }
 
   function startNew() {
+    setRequirementReview(null); setRequirementAnswers({}); setRequirementRounds([]);
     if (job && !window.confirm("离开当前任务并创建新任务？已有 checkpoint 不会删除，可用 job_id 恢复。")) return;
     try { localStorage.removeItem(JOB_KEY); } catch { /* The current view still resets. */ }
     setJob(null); setDraft([]); setFeedback(""); setFeedbackCandidateId(""); setFeedbackDecision(""); setClarifyNote(""); setClarificationDrafts({}); setTargetQuestion(null); setEditing(false); setManualEditing(false); setRequirementEditing(false); setManualRequirement(""); setError(""); setNotice(""); setDatabaseHistory(null); setSnapshots({}); setReceipt(null); setRestoreId(""); setView("需求校准"); setTitle(""); setRequirement(""); setCandidatesText("");
@@ -293,7 +336,7 @@ export default function WorkspacePage() {
 
       {view === "需求校准" && <section id="requirement">
         <header className="calibration-heading"><div><h1>需求校准</h1><p>{job ? "当前任务的招聘意图与澄清结果。" : "将你的招聘意图转化为可执行的招聘标准。"}</p></div><button className="loop-button secondary" disabled={!!busy} onClick={startNew}>新建职位</button></header>
-        {!job ? <><div className="loop-restore-form"><label htmlFor="new-job-title">职位名称</label><input id="new-job-title" value={title} onChange={(event) => setTitle(event.target.value)} placeholder="例如：后端工程师（高并发方向）" /></div><RequirementPanel requirement={requirement} onChange={setRequirement} candidatesText={candidatesText} onCandidatesChange={setCandidatesText} busy={!!busy} onGenerate={(value) => { setRequirement(value); void create(value); }} /></> : <div className="calibration-columns calibration-existing">
+        {!job ? <><div className="loop-restore-form"><label htmlFor="new-job-title">职位名称</label><input id="new-job-title" value={title} disabled={!!busy} onChange={(event) => setTitle(event.target.value)} placeholder="例如：后端工程师（高并发方向）" /></div><RequirementPanel requirement={requirement} onChange={editRequirement} candidatesText={candidatesText} onCandidatesChange={setCandidatesText} busy={!!busy} review={requirementReview} answers={requirementAnswers} rounds={requirementRounds} onAnswer={(index, value) => setRequirementAnswers((current) => ({ ...current, [index]: value }))} onSubmitAnswers={() => void answerRequirement()} onGenerate={(value) => { void create(value, requirementRounds); }} /></> : <div className="calibration-columns calibration-existing">
           <div className="calibration-left"><section className="intent-card"><header><span className="purple-icon" aria-hidden="true">✦</span><div><h2>你的招聘意图</h2><p>{job.job_title} · 来自职位启动沟通</p></div></header><div className="intent-body">{requirementEditing && waiting === "spec_confirmation" ? <><label htmlFor="revised-requirement">修订招聘意图</label><textarea id="revised-requirement" value={requirement} disabled={!!busy} rows={5} onChange={(event) => setRequirement(event.target.value)} /><p className="calibration-intent-hint">重新分析会生成新草稿并保留当前草稿；原有候选人文本会复制到新草稿，确认前不会评估。</p><div className="loop-actions"><button type="button" className="loop-button primary" disabled={!!busy || !requirement.trim() || requirement.trim() === job.requirement} onClick={() => void reanalyzeRequirement()}>重新分析需求</button><button type="button" className="loop-button secondary" disabled={!!busy} onClick={() => { setRequirementEditing(false); setRequirement(job.requirement ?? ""); }}>取消</button></div></> : <><p className="calibration-intent-text">{job.requirement || job.clarified_requirement || "已建立招聘标准"}</p><p className="calibration-intent-hint">AI 将意图整理成标准；尚不明确的部分由 HR 确认。</p><button type="button" className="loop-button secondary" disabled={!!busy || waiting === "human_approval"} onClick={() => { if (waiting === "spec_confirmation") { setRequirement(job.requirement ?? ""); setRequirementEditing(true); } else openManualEditor(); }}>{waiting === "spec_confirmation" ? "修改原始需求" : "修订招聘意图与标准"}</button></>}</div></section>
             {job.clarified_requirement && job.clarified_requirement !== (job.requirement || job.clarified_requirement) && <p className="clarification-notice"><b>已整理的需求</b>{job.clarified_requirement}</p>}
             <section className="calibration-open-questions"><div className="calibration-open-heading"><div><strong>澄清问题</strong><p>让我们明确什么才是“合适”。逐题反馈后，经审批才会更新标准。</p></div><span>{Object.values(job.clarification_responses ?? {}).filter((item) => ["APPROVED", "NOT_REQUIRED"].includes(item.status)).length} / {job.clarification_questions?.length ?? 0} 已处理</span></div>{job.clarification_questions?.length ? job.clarification_questions.map((question, i) => <div className="calibration-open-row" key={i}><span className="question-index">{String(i + 1).padStart(2, "0")}</span><span>{question}</span><small>{job.clarification_responses?.[String(i)]?.status === "APPROVED" ? "已纳入标准" : job.clarification_responses?.[String(i)]?.status === "NOT_REQUIRED" ? "非必要" : job.clarification_responses?.[String(i)]?.status === "PENDING_APPROVAL" ? "待审批" : "待澄清"}</small><button type="button" className="loop-button secondary" onClick={() => { setTargetQuestion(i); setView("反馈与审批"); window.location.hash = "feedback-questions"; }}>修改 →</button></div>) : <p className="calibration-intent-hint">当前没有待核实问题。若经理提出新要求，请前往反馈与审批。</p>}</section>

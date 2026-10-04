@@ -1,4 +1,6 @@
 export type Criterion = { id: string; type: "MUST_HAVE" | "NICE_TO_HAVE" | "VETO"; text: string; weight: number };
+export type RequirementReview = { status: "SAFE" | "BLOCKED" | "NEEDS_CLARIFICATION"; reason: string; questions: { question: string; options?: string[] }[] };
+export type RequirementAnswer = { question: string; answer: string };
 export type Verdict = "推荐" | "待核实" | "不推荐" | "否决";
 export type Judgment = "SATISFIED" | "NOT_SATISFIED" | "NO_EVIDENCE" | "HIT" | "CLEAR" | "UNKNOWN";
 export type Evaluation = { candidate_id: string; name: string; scores: Record<string, number | null>; judgments?: Record<string, Judgment>; verdict: Verdict; tier_reason?: string };

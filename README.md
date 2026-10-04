@@ -1,4 +1,8 @@
-# Hire Loop 前端
+# AI软件赛道 - HireSpec Loop - 大秦帝国
+
+在线演示：[HireSpec Loop](http://47.243.206.67/workspace?v=20261004-company#requirement)。后端与完整项目说明见 [xihack-ai/xihack-service](https://github.com/xihack-ai/xihack-service/blob/main/PROJECT.md)。团队演示用户名 `demo`，口令由团队另行提供，访问网站无需 clone 或自行配置模型密钥。
+
+创建前需求澄清：先逐题回答，再生成待确认的标准草稿；公司名单和必须／加分类型保留到具体标准。新增调用 `POST /requirements/clarify`；创建职位时传递 `clarification_answers`。修改原始需求会清除旧问答。
 
 2026-10-04：反馈审核明确区分待审批、需补充说明与已拦截。工作台支持经理逐题回答（选项或自由输入）、本次问答历史、审核范围说明及编辑原反馈；删除通用能力替换按钮。新增调用 `POST /calibrations/{job_id}/feedback/answer`，提交当前 feedback_id、base_spec_version、answers 和 created_by。回答后仍需审核及人工审批，不直接修改正式标准或排名。
 
