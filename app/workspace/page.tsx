@@ -70,6 +70,7 @@ export default function WorkspacePage() {
   const [feedbackCandidateId, setFeedbackCandidateId] = useState("");
   const [feedbackDecision, setFeedbackDecision] = useState<"通过" | "不合适" | "待定" | "">("");
   const [clarifyNote, setClarifyNote] = useState("");
+  const [feedbackAnswers, setFeedbackAnswers] = useState<Record<number, string>>({});
   const [clarificationDrafts, setClarificationDrafts] = useState<Record<number, { category: ClarificationChoice | ""; answer: string }>>({});
   const [targetQuestion, setTargetQuestion] = useState<number | null>(null);
   const [editing, setEditing] = useState(false);
@@ -111,6 +112,7 @@ export default function WorkspacePage() {
   const waiting = job?.workflow.waiting_for;
 
   function receive(value: unknown) {
+    setFeedbackAnswers({});
     assertCalibration(value);
     setJob(value); setTitle(value.job_title); setRequirement(value.requirement ?? ""); setDraft(value.criteria.map((item) => ({ ...item }))); setEditing(false); setRestoreId(value.job_id);
     setClarificationDrafts(Object.fromEntries(Object.entries(value.clarification_responses ?? {}).map(([index, response]) => [Number(index), { category: response.category, answer: response.answer }])));
@@ -186,6 +188,20 @@ export default function WorkspacePage() {
       else if (result.feedback_status === "NEEDS_CLARIFICATION") setNotice(result.feedback_question || "请补充更具体的岗位要求。");
       else if (item.category === "NOT_REQUIRED") setNotice("已记录为非必要；标准与候选人排序不变。");
       else setNotice("当前没有产生新提案；标准与候选人排序不变。");
+    });
+  }
+
+  async function answerFeedback() {
+    if (!job || waiting || !job.feedback_id) return;
+    const questions = job.feedback_review?.questions?.length ? job.feedback_review.questions : [{ question: job.feedback_question || clarifyNote, options: [] }];
+    const answers = questions.map((_, index) => feedbackAnswers[index]?.trim() || "");
+    if (answers.some((answer) => !answer)) return;
+    await operation("处理澄清回答", async () => {
+      const result = await request(`/calibrations/${job.job_id}/feedback/answer`, {
+        feedback_id: job.feedback_id, base_spec_version: job.spec_version, answers, created_by: "manager-demo",
+      });
+      assertCalibration(result); receive(result);
+      setNotice(result.feedback_status === "PENDING_APPROVAL" ? "回答已形成修改提议，请审核后接受。标准与排名尚未改变。" : result.feedback_status === "BLOCKED" ? "回答包含受限条件，请修改原反馈。" : result.feedback_status === "NEEDS_CLARIFICATION" ? "还需要补充说明，请回答下面的问题。" : "已处理回答，未产生新标准修改。");
     });
   }
 
@@ -346,6 +362,7 @@ export default function WorkspacePage() {
             </article>;
           })}</section>
           <section className="loop-proposal">
+            <details className="loop-note"><summary>查看审核范围</summary><p>明确按候选人的年龄、性别、婚育、民族、宗教、种族、残障、外貌筛选时拦截；业务背景中出现这些词不会仅因关键词拦截。混合反馈需修改后重新审核。</p><p>大厂、指定公司、学历、专业、学校背景不会仅因关键词被拦截；范围或岗位必要性不明时向经理澄清。主动性、有冲劲、快节奏等模糊要求同样先追问。明确岗位相关要求生成提议，批准后才生效。这是产品审核规则，不代表法律合规结论。</p></details>
             <header><div><span className="feedback-step">03 · 提案与审批</span><h2>变更提案</h2></div><span className={`status-pill ${reviewStatusClass}`}>{reviewStatus}</span></header>
             {reviewStatus === "待审批" && proposal && <>
               <p>{proposal.reason}</p>
@@ -360,8 +377,8 @@ export default function WorkspacePage() {
               {editing && <><p className="loop-note">保存只更新草稿；随后点击接受才生效。未变化标准请保留原 ID。</p>{job.requirement_revision != null && <label className="proposal-requirement-edit">修订后的招聘意图<textarea rows={3} value={manualRequirement} disabled={!!busy} onChange={(event) => setManualRequirement(event.target.value)} /></label>}<CriteriaEditor value={draft} onChange={setDraft} disabled={!!busy} allocatedIds={job.allocated_criterion_ids} /></>}
               <div className="loop-actions"><button className="loop-button primary" disabled={!!busy || (editing && (!draft.length || draft.some((item) => !item.text.trim()) || (job.requirement_revision != null && !manualRequirement.trim())))} onClick={() => void (editing ? saveDraft() : decide("accept"))}>{editing ? "保存草稿" : "接受"}</button><button className="loop-button secondary" disabled={!!busy} onClick={() => { setEditing(!editing); setDraft(proposalDraft(job)); setManualRequirement(job.requirement_revision ?? job.requirement ?? ""); }}>{editing ? "取消编辑" : "编辑"}</button><button className="loop-button secondary" disabled={!!busy} onClick={() => void decide("reject")}>拒绝</button></div>
             </>}
-            {reviewStatus === "已拦截" && <><p>后端风险检查：{job.risk_flags.join("、")}。该反馈没有进入 Hiring Spec。</p><div className="loop-actions">{["学习能力", "主动性", "适应快节奏"].map((label) => <button key={label} className="loop-button secondary" disabled={!!busy} onClick={() => { setFeedback(`更看重${label}，请结合具体项目证据核验。`); }}>{label}</button>)}</div></>}
-            {reviewStatus === "需要澄清" && <p>{job.feedback_question ?? clarifyNote}</p>}
+            {reviewStatus === "已拦截" && <><p>拦截原因：{job.feedback_review?.reason || job.risk_flags.join("、")}。该反馈没有进入 Hiring Spec。</p><p>原反馈：{job.feedback_thread?.original || job.feedback_review?.source_texts?.join("；") || "历史反馈未保存原文，请查看决策日志。"}</p><button type="button" className="loop-button secondary" disabled={!!busy || !!waiting} onClick={() => { setFeedback(job.feedback_thread?.original || job.feedback_review?.source_texts?.[0] || ""); setFeedbackCandidateId(""); setFeedbackDecision(""); document.getElementById("feedback-input")?.focus(); setNotice("请编辑原反馈并重新提交；系统不会自动替换你的真实意图。"); }}>编辑原反馈</button></>}
+            {reviewStatus === "需要澄清" && <form onSubmit={(event) => { event.preventDefault(); void answerFeedback(); }}><p>请提出反馈的用人经理回答，HR可代填。回答不会直接修改标准。</p><p>原反馈：{job.feedback_thread?.original || "请结合本次反馈补充说明"}</p>{(job.feedback_thread?.rounds || []).map((round, index) => <details key={index}><summary>第{index + 1}轮回答</summary>{round.questions.map((question, i) => <p key={i}>{question.question}：{round.answers[i]}</p>)}</details>)}{(job.feedback_review?.questions?.length ? job.feedback_review.questions : [{ question: job.feedback_question || clarifyNote, options: [] }]).map((question, index) => <div className="clarification-question" key={index}><label htmlFor={`feedback-answer-${index}`}>{index + 1}. {question.question}</label><div className="loop-actions">{question.options?.map((option) => <button type="button" className="loop-button secondary" key={option} disabled={!!busy} onClick={() => setFeedbackAnswers((values) => ({ ...values, [index]: option }))}>{option}</button>)}</div><textarea id={`feedback-answer-${index}`} rows={3} placeholder="选择选项或填写自己的回答，可补充具体要求和证据" value={feedbackAnswers[index] || ""} disabled={!!busy} onChange={(event) => setFeedbackAnswers((values) => ({ ...values, [index]: event.target.value }))} /></div>)}<button className="loop-button primary" disabled={!!busy || !!waiting || !job.feedback_id || (job.feedback_review?.questions?.length ? job.feedback_review.questions : [{}]).some((_, index) => !feedbackAnswers[index]?.trim())}>提交回答并继续</button></form>}
             {reviewStatus === "无变更" && <p className="loop-note">当前没有待处理的变更提案。提交反馈后，提案会显示在这里。</p>}
           </section>
         </>}

@@ -14,6 +14,9 @@ export type Calibration = {
   change_proposal: { reason?: string; add?: Partial<Criterion>[]; remove?: string[]; update?: Criterion[] } | null;
   allocated_criterion_ids?: string[]; recomputation?: Recompute | null; proposal_impact?: Recompute | null;
   feedback_status?: string | null; feedback_question?: string | null; approval_draft?: Criterion[] | null;
+  feedback_id?: string | null;
+  feedback_review?: { status: string; reason: string; source_texts: string[]; questions: { question: string; options?: string[] }[] };
+  feedback_thread?: { original?: string; rounds?: { questions: { question: string }[]; answers: string[] }[] };
   requirement_revision?: string | null;
   feedback_notes: string[];
   workflow: { next_nodes: string[]; completed_nodes: string[]; waiting_for: "spec_confirmation" | "human_approval" | null; model_mode: "offline_fallback" | "live" | "record" | "replay"; checkpointer: "memory" | "postgres"; history: { node: string; spec_version?: number }[] };
